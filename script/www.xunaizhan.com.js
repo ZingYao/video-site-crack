@@ -4,7 +4,7 @@ const copyCode = () => {
     const videoName = document.querySelector("#hl02 > div > ul").querySelector('.active').childNodes[0].innerText;
 
     return copyToClicpboard(`<div>
-        <span>${videoName}：<span>
+        <span>${videoName}：</span>
         <a href="thunder://${btoa(m3u8VideoUrl)}"> 点我下载</a >
         <a onclick="playSelf(this)" href="javascript:void(0)" value="${m3u8VideoUrl}">点我在线播放</a >
     </div>`);
