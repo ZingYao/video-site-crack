@@ -1,0 +1,51 @@
+
+body {
+    padding: 20px;
+    background-color: #f2f2f2;
+}
+
+.search-container {
+    max-width: 600px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+.search-form {
+    display: inline-block;
+    text-align: left;
+}
+
+#searchResult,
+#videoDetail {
+    max-width: 800px;
+    margin: 20px auto;
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+#player {
+    max-width: 100%;
+    margin: 20px auto;
+    display: block;
+}
+
+.video-btn {
+    margin: 5px;
+}
+
+@media (max-width: 768px) {
+    .search-container {
+        padding: 0 10px;
+    }
+
+    #searchResult,
+    #videoDetail {
+        padding: 10px;
+    }
+
+    .search-form .layui-inline {
+        margin-bottom: 10px;
+    }
+}
