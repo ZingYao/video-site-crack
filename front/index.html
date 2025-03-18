@@ -5,16 +5,19 @@
     <meta charset="UTF-8" />
     <title>视频搜索</title>
     <link rel="stylesheet" href="/src/common.css" />
+    <link rel="stylesheet" href="/src/index.css" />
     <script src="/src/common.js"></script>
     <script src="/src/index.js"></script>
 </head>
 <body>
-    <!-- 添加遮罩层 -->
-    <div class="loading-overlay" id="loadingOverlay">
+    <!-- 添加加载遮罩 -->
+    <div class="loading-overlay active" id="loadingOverlay">
         <div class="loading-spinner"></div>
     </div>
 
+    <!-- 页面内容 -->
     <div class="container">
+        <!-- 页面内容保持不变 -->
         <header class="header">
             <div class="user-info">
                 <span id="username">未登录</span>
@@ -37,5 +40,22 @@
 
         <div id="searchResult" class="video-grid hidden"></div>
     </div>
+
+    <script>
+        // 页面加载完成后隐藏加载遮罩
+        window.addEventListener('load', function() {
+            document.getElementById('loadingOverlay').classList.remove('active');
+        });
+        
+        // 在AJAX请求开始时显示加载遮罩
+        document.addEventListener('ajaxStart', function() {
+            document.getElementById('loadingOverlay').classList.add('active');
+        });
+        
+        // 在AJAX请求结束时隐藏加载遮罩
+        document.addEventListener('ajaxEnd', function() {
+            document.getElementById('loadingOverlay').classList.remove('active');
+        });
+    </script>
 </body>
 </html>

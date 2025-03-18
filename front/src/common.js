@@ -452,3 +452,38 @@ window.addEventListener('load', () => {
         document.body.appendChild(previewContainer);
     }
 });
+
+// 添加以下代码到 common.js 文件中
+
+// 重写 XMLHttpRequest 以便触发自定义事件
+(function() {
+    const originalXHR = window.XMLHttpRequest;
+    
+    function newXHR() {
+        const xhr = new originalXHR();
+        
+        xhr.addEventListener('loadstart', function() {
+            document.dispatchEvent(new Event('ajaxStart'));
+        });
+        
+        xhr.addEventListener('loadend', function() {
+            document.dispatchEvent(new Event('ajaxEnd'));
+        });
+        
+        return xhr;
+    }
+    
+    window.XMLHttpRequest = newXHR;
+})();
+
+// 添加页面加载完成后的处理
+document.addEventListener('DOMContentLoaded', function() {
+    // 检查是否存在加载遮罩
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (loadingOverlay) {
+        // 如果页面内容已经缓存，立即隐藏加载遮罩
+        if (document.readyState === 'complete') {
+            loadingOverlay.classList.remove('active');
+        }
+    }
+});
