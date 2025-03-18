@@ -1,201 +1,316 @@
 
-let domain = "http://localhost:8085"
-if (window.location.href.indexOf("localhost") === -1 && window.location.href.indexOf("127.0.0.1") === -1) {
-    domain = "";
-}
-if (!window.location.pathname.includes("/login.html")) {
-    // 不在登录页面 判断是否包含登录态，不包含登录态需要跳转登录页面
-    let token = localStorage.getItem('login_token');
-    if (!token) {
-        window.location.pathname = '/login.html'
+/**
+ * 视频站点通用工具库
+ * 提供API请求、认证、UI组件等通用功能
+ */
+/**
+ * 常量和配置
+ */
+// API域名配置
+const DOMAIN = (() => {
+    // 本地开发环境使用完整域名，生产环境使用相对路径
+    if (window.location.href.indexOf("localhost") === -1 && window.location.href.indexOf("127.0.0.1") === -1) {
+        return "";
     }
+    return "http://localhost:8085";
+})();
 
-}
-let siteSelectionDom = document.getElementById("site");
+// 存储键名常量
+const STORAGE_KEYS = {
+    TOKEN: 'login_token',
+    USERNAME: 'username',
+    SITE: 'site',
+    HISTORY: 'history',
+    TITLE: 'title',
+    PAGE_URL: 'page_url'
+};
 
+// 页面路径常量
+const ROUTES = {
+    LOGIN: '/login.html',
+    PLAY: '/play.html'
+};
 
-window.addEventListener('load', () => {
-    const username = document.getElementById('username');
-    if (username && username.tagName === 'SPAN') {
-        username.innerHTML = localStorage.getItem('username');
+/**
+ * 工具函数
+ */
+// 本地存储操作封装
+const storage = {
+    get: (key) => {
+        const value = localStorage.getItem(key);
+        try {
+            return JSON.parse(value);
+        } catch {
+            return value;
+        }
+    },
+    set: (key, value) => {
+        if (typeof value === 'object') {
+            localStorage.setItem(key, JSON.stringify(value));
+        } else {
+            localStorage.setItem(key, value);
+        }
+    },
+    remove: (key) => {
+        localStorage.removeItem(key);
     }
+};
 
-    const logoutBtn = document.getElementById("logout")
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', () => {
-            if (!confirm("确定要退出登录吗？")) {
-                return
+// API请求封装
+const api = {
+    /**
+     * 发送GET请求
+     * @param {string} endpoint - API端点
+     * @param {Object} params - 查询参数
+     * @returns {Promise<Object>} 响应数据
+     */
+    get: async (endpoint, params = {}) => {
+        const queryString = Object.entries(params)
+            .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+            .join('&');
+        
+        const url = `${DOMAIN}${endpoint}${queryString ? '?' + queryString : ''}`;
+        
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': storage.get(STORAGE_KEYS.TOKEN) || ''
             }
-            logout();
-        })
+        });
+        
+        const data = await response.json();
+        
+        // 检查登录状态
+        if (data.code === 2) {
+            redirectToLogin();
+            return null;
+        }
+        
+        return data;
+    },
+    
+    /**
+     * 发送POST请求
+     * @param {string} endpoint - API端点
+     * @param {Object|FormData} body - 请求体
+     * @param {boolean} useAuth - 是否使用认证头
+     * @returns {Promise<Object>} 响应数据
+     */
+    post: async (endpoint, body, useAuth = true) => {
+        const headers = {};
+        let processedBody = body;
+        
+        if (useAuth) {
+            headers['Authorization'] = storage.get(STORAGE_KEYS.TOKEN) || '';
+        }
+        
+        if (!(body instanceof FormData)) {
+            headers['Content-Type'] = 'application/json';
+            processedBody = JSON.stringify(body);
+        }
+        
+        const response = await fetch(`${DOMAIN}${endpoint}`, {
+            method: 'POST',
+            headers,
+            body: processedBody
+        });
+        
+        return await response.json();
     }
-    // 添加图片预览容器
-    const previewContainer = document.createElement('div');
-    previewContainer.className = 'image-preview-container';
-    previewContainer.onclick = () => previewContainer.classList.remove('active');
-    document.body.appendChild(previewContainer);
+};
 
-});
+/**
+ * 认证相关函数
+ */
+// 检查登录状态
+const checkAuth = () => {
+    // 登录页面不需要检查
+    if (window.location.pathname.includes(ROUTES.LOGIN)) {
+        return;
+    }
+    
+    // 检查登录令牌
+    const token = storage.get(STORAGE_KEYS.TOKEN);
+    if (!token) {
+        redirectToLogin();
+    }
+};
 
-function getSiteSelectionDom() {
+// 重定向到登录页
+const redirectToLogin = () => {
+    window.location.pathname = ROUTES.LOGIN;
+};
+
+/**
+ * 用户认证函数
+ * @param {string} username - 用户名
+ * @param {string} password - 密码
+ * @returns {Promise<Object>} 登录响应
+ */
+const login = async (username, password) => {
+    const formData = new FormData();
+    formData.append('username', username);
+    formData.append('password', password);
+    
+    return await api.post('/api/login', formData, false);
+};
+
+/**
+ * 用户登出函数
+ */
+const logout = async () => {
+    await api.post('/api/logout', {});
+    storage.remove(STORAGE_KEYS.TOKEN);
+    storage.remove(STORAGE_KEYS.USERNAME);
+    redirectToLogin();
+};
+
+/**
+ * UI组件和DOM操作
+ */
+// 获取站点选择下拉框
+let siteSelectionDom = null;
+const getSiteSelectionDom = () => {
     if (!siteSelectionDom) {
         siteSelectionDom = document.getElementById("site");
     }
     return siteSelectionDom;
-}
+};
+
+/**
+ * 初始化站点列表
+ * 从API获取可用站点并填充下拉框
+ */
 const initSiteList = async () => {
-    const site = await fetch(`${domain}/api/site/list`, {
-        headers: {
-            'Authorization': localStorage.getItem('login_token')
+    try {
+        const response = await api.get('/api/site/list');
+        if (!response) return;
+        
+        const siteSelection = getSiteSelectionDom();
+        if (!siteSelection) return;
+        
+        // 清空并添加默认选项
+        siteSelection.innerHTML = "";
+        const defaultOption = document.createElement("option");
+        defaultOption.value = "";
+        defaultOption.innerHTML = "选择站点";
+        siteSelection.appendChild(defaultOption);
+        
+        // 添加站点选项
+        response.data.forEach(site => {
+            const option = document.createElement("option");
+            option.value = site;
+            option.innerHTML = site;
+            siteSelection.appendChild(option);
+        });
+        
+        // 恢复上次选择
+        const lastSite = storage.get(STORAGE_KEYS.SITE);
+        if (lastSite && response.data.includes(lastSite)) {
+            siteSelection.value = lastSite;
         }
-    })
-    const body = await site.json();
-    if (body.code == 2) {
-        // 没有登录态
-        window.location.pathname = '/login.html'
-        return
+    } catch (error) {
+        console.error('加载站点列表失败:', error);
     }
-    // 将body中的数据覆盖到siteSelection中
-    const siteSelection = getSiteSelectionDom();
-    siteSelection.innerHTML = "";
-    // 给data的第一位插入选择站点的选项
-    const option = document.createElement("option");
-    option.value = "";
-    option.innerHTML = "选择站点";
-    siteSelection.appendChild(option);
-    for (let i = 0; i < body.data.length; i++) {
-        const option = document.createElement("option");
-        option.value = body.data[i];
-        option.innerHTML = body.data[i];
-        siteSelection.appendChild(option);
-    }
-    // 查询是否选择过，有选择过的话，将选择过的站点设置为选中
-    const chooseSite = localStorage.getItem("site");
-    if (chooseSite && body.data.indexOf(chooseSite) > -1) {
-        siteSelection.value = chooseSite;
-    }
-}
+};
 
-const searchVideo = (site, search) => {
-    return new Promise(async (resolve, reject) => {
-        const video = await fetch(`${domain}/api/site/search?site_name=${site}&query=${search}`, {
-            headers: {
-                'Authorization': localStorage.getItem('login_token')
-            }
-        })
-        const body = await video.json();
-        if (body.code == 2) {
-            // 没有登录态
-            window.location.pathname = '/login.html'
-            return
-        }
-        resolve(body.data);
-    })
-}
+/**
+ * 搜索视频
+ * @param {string} site - 站点名称
+ * @param {string} query - 搜索关键词
+ * @returns {Promise<Array>} 搜索结果
+ */
+const searchVideo = async (site, query) => {
+    const response = await api.get('/api/site/search', { site_name: site, query });
+    return response ? response.data : [];
+};
 
-const getVideoDetail = (site, url) => {
-    return new Promise(async (resolve, reject) => {
-        const video = await fetch(`${domain}/api/site/detail?site_name=${site}&page_url=${url}`, {
-            headers: {
-                'Authorization': localStorage.getItem('login_token')
-            }
-        })
-        const body = await video.json();
-        if (body.code == 2) {
-            // 没有登录态
-            window.location.pathname = '/login.html'
-            return
-        }
-        resolve(body.data);
-    })
-}
+/**
+ * 获取视频详情
+ * @param {string} site - 站点名称
+ * @param {string} url - 视频页面URL
+ * @returns {Promise<Object>} 视频详情
+ */
+const getVideoDetail = async (site, url) => {
+    const response = await api.get('/api/site/detail', { site_name: site, page_url: url });
+    return response ? response.data : null;
+};
 
-const login = (account, password) => {
-    return new Promise(async (resolve, reject) => {
-        const formData = new FormData();
-        formData.append('username', account);
-        formData.append('password', password);
-
-        const video = await fetch(`${domain}/api/login`, {
-            method: 'POST',
-            body: formData
-        })
-        const body = await video.json();
-        resolve(body);
-    })
-}
-
-const logout = () => {
-    return new Promise(async (resolve, reject) => {
-        await fetch(`${domain}/api/logout`, {
-            headers: {
-                'Authorization': localStorage.getItem('login_token')
-            },
-            method: 'POST'
-        })
-
-        localStorage.removeItem('login_token');
-        localStorage.removeItem('username');
-        window.location.pathname = '/login.html'
-    })
-}
-
-
-// 点击搜索结果
-const clickVideoCard = (cover, actor, type, director, desc, title, url, detail) => {
-    // 设置信息到localStorage
-    localStorage.setItem('title', title);
-    localStorage.setItem('page_url', url);
+/**
+ * 处理视频卡片点击
+ * @param {Object} videoInfo - 视频信息对象
+ * @param {Array} detail - 可选的视频详情
+ */
+const clickVideoCard = async (element) => {
+    // 保存基本信息
+    storage.set(STORAGE_KEYS.TITLE, element.title);
+    storage.set(STORAGE_KEYS.PAGE_URL, element.page_url);
+    
+    // 处理详情并跳转
     const dump2Play = (detailRes) => {
-        // 信息存入localStorage
-        let history = JSON.parse(localStorage.getItem('history')) ?? [];
-        // 判断url 是否存在于history
-        const index = history.findIndex((item) => item.url === url);
+        // 更新历史记录
+        let history = storage.get(STORAGE_KEYS.HISTORY) || [];
+        
+        // 检查是否已存在
+        const index = history.findIndex((item) => item.page_url === element.page_url);
         if (index > -1) {
-            // 将匹配到的元素移动到数组的最后一位
+            // 更新并移至末尾
             const [removed] = history.splice(index, 1);
             removed.detail = detailRes;
             history.push(removed);
         } else {
-            history.push({
-                cover, actor, type, director, desc, title, url, detail: detailRes
-            });
+            element.detail = detailRes
+            // 添加新记录
+            history.push(element);
         }
-        localStorage.setItem('history', JSON.stringify(history));
-        // 跳转到视频播放页面
-        window.location.href = '/play.html';
+        
+        storage.set(STORAGE_KEYS.HISTORY, history);
+        
+        // 跳转到播放页
+        window.location.href = ROUTES.PLAY;
+    };
+    
+    // 如果已有详情，直接处理
+    if (element.detail) {
+        dump2Play(element.detail);
+        return;
     }
-    if (!detail) {
-        // 获取视频详情
-        const site = document.getElementById('site').value;
+    
+    // 否则获取详情
+    try {
         showLoading();
-        getVideoDetail(site, url).then((res) => {
-            dump2Play(res);
-        }).finally(() => {
-            hideLoading();
-        })
-    } else {
-        dump2Play(detail);
+        let chooseSite = getSiteSelectionDom()?.value ?? element.site;
+        const detailData = await getVideoDetail(chooseSite, element.page_url);
+        dump2Play(detailData);
+    } catch (error) {
+        console.error('获取视频详情失败:', error);
+        alert('获取视频详情失败，请稍后重试');
+    } finally {
+        hideLoading();
     }
-}
+};
 
-// 创建视频卡片
+/**
+ * 创建视频卡片
+ * @param {Object} element - 视频信息
+ * @returns {HTMLElement} 视频卡片DOM元素
+ */
 const createVideoCard = (element) => {
+    // 创建卡片容器
     const card = document.createElement('div');
     card.className = 'video-card';
-    card.onclick = () => clickVideoCard(element.cover, element.actor, element.type, element.director, element.desc, element.title, element.page_url);
+    card.onclick = () => clickVideoCard(element);
 
     // 创建封面容器
     const coverContainer = document.createElement('div');
     coverContainer.className = 'video-cover';
+    
+    // 创建封面图片
     const img = document.createElement('img');
     img.src = element.cover;
     img.alt = element.title;
     img.onclick = (e) => {
         e.stopPropagation();
-        const previewContainer = document.createElement('div');
-        previewContainer.innerHTML = `<img src="${element.cover}" alt="${element.title}">`;
-        previewContainer.classList.add('active');
+        showImagePreview(element.cover, element.title);
     };
     coverContainer.appendChild(img);
 
@@ -203,37 +318,65 @@ const createVideoCard = (element) => {
     const infoContainer = document.createElement('div');
     infoContainer.className = 'video-info';
 
-    // 标题
+    // 添加标题
     const title = document.createElement('h3');
     title.className = 'video-title';
     title.textContent = element.title;
+    infoContainer.appendChild(title);
 
-    // 创建详情列表
+    // 添加详情列表
     const details = document.createElement('div');
     details.className = 'video-details';
+    
+    // 添加各项详情
+    addDetailItem(details, '主演', element.actor);
+    addDetailItem(details, '类型', element.type);
+    addDetailItem(details, '导演', element.director);
+    infoContainer.appendChild(details);
 
-    const detailItems = [
-        { label: '主演', value: element.actor },
-        { label: '类型', value: element.type },
-        { label: '导演', value: element.director }
-    ];
+    // 添加简介
+    if (element.desc) {
+        const description = createDescriptionSection(element.desc);
+        infoContainer.appendChild(description);
+    }
 
-    detailItems.forEach(item => {
-        if (item.value) {
-            const detail = document.createElement('div');
-            detail.className = 'detail-item';
-            detail.innerHTML = `<span class="label">${item.label}:</span> ${item.value}`;
-            details.appendChild(detail);
-        }
-    });
+    // 组装卡片
+    card.appendChild(coverContainer);
+    card.appendChild(infoContainer);
 
-    // 简介
+    return card;
+};
+
+/**
+ * 创建详情项
+ * @param {HTMLElement} container - 父容器
+ * @param {string} label - 标签
+ * @param {string} value - 值
+ */
+const addDetailItem = (container, label, value) => {
+    if (!value) return;
+    
+    const detail = document.createElement('div');
+    detail.className = 'detail-item';
+    detail.innerHTML = `<span class="label">${label}:</span> ${value}`;
+    container.appendChild(detail);
+};
+
+/**
+ * 创建可展开的描述部分
+ * @param {string} desc - 描述文本
+ * @returns {HTMLElement} 描述部分DOM元素
+ */
+const createDescriptionSection = (desc) => {
     const description = document.createElement('div');
     description.className = 'video-description';
+    
+    // 描述内容
     const descContent = document.createElement('div');
     descContent.className = 'desc-content';
-    descContent.innerHTML = `<span class="label">简介:</span> ${element.desc}`;
-
+    descContent.innerHTML = `<span class="label">简介:</span> ${desc}`;
+    
+    // 展开/收起按钮
     const toggleBtn = document.createElement('button');
     toggleBtn.className = 'toggle-desc';
     toggleBtn.textContent = '展开';
@@ -242,27 +385,70 @@ const createVideoCard = (element) => {
         descContent.classList.toggle('expanded');
         toggleBtn.textContent = descContent.classList.contains('expanded') ? '收起' : '展开';
     };
-
+    
     description.appendChild(descContent);
     description.appendChild(toggleBtn);
-
-    // 组装卡片
-    infoContainer.appendChild(title);
-    infoContainer.appendChild(details);
-    infoContainer.appendChild(description);
-    card.appendChild(coverContainer);
-    card.appendChild(infoContainer);
-
-    return card;
+    
+    return description;
 };
 
+/**
+ * 显示图片预览
+ * @param {string} src - 图片URL
+ * @param {string} alt - 图片描述
+ */
+const showImagePreview = (src, alt) => {
+    const previewContainer = document.querySelector('.image-preview-container');
+    if (previewContainer) {
+        previewContainer.innerHTML = `<img src="${src}" alt="${alt || ''}">`;
+        previewContainer.classList.add('active');
+    }
+};
 
-// 显示loading遮罩
+/**
+ * 显示加载遮罩
+ */
 const showLoading = () => {
-    document.getElementById('loadingOverlay').classList.add('active');
-}
+    document.getElementById('loadingOverlay')?.classList.add('active');
+};
 
-// 隐藏loading遮罩
+/**
+ * 隐藏加载遮罩
+ */
 const hideLoading = () => {
-    document.getElementById('loadingOverlay').classList.remove('active');
-}
+    document.getElementById('loadingOverlay')?.classList.remove('active');
+};
+
+/**
+ * 页面初始化
+ */
+window.addEventListener('load', () => {
+    
+    // 检查登录状态
+    checkAuth();
+    
+    // 显示用户名
+    const usernameElement = document.getElementById('username');
+    if (usernameElement && usernameElement.tagName === 'SPAN') {
+        usernameElement.innerHTML = storage.get(STORAGE_KEYS.USERNAME) || '';
+    }
+    
+    // 绑定登出按钮
+    const logoutBtn = document.getElementById("logout");
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => {
+            if (!confirm("确定要退出登录吗？")) {
+                return;
+            }
+            logout();
+        });
+    }
+    
+    // 初始化图片预览容器
+    if (!document.querySelector('.image-preview-container')) {
+        const previewContainer = document.createElement('div');
+        previewContainer.className = 'image-preview-container';
+        previewContainer.onclick = () => previewContainer.classList.remove('active');
+        document.body.appendChild(previewContainer);
+    }
+});

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
+	"log"
 	"net/http"
 	"net/url"
 	"sort"
@@ -38,6 +39,7 @@ func (x *XunaizhanCom) SearchVideos(query string) []videotools.VideoInfo {
 	param.Add("wd", query)
 	param.Add("submit", "")
 	res, err := http.Get(fmt.Sprintf("%s%s?%s", x.SiteDomain, x.SearchPath, param.Encode()))
+	log.Printf("url: %s,body:%v,err:%v", res.Request.URL.String(), res.Body, err)
 	if err != nil {
 		return videoList
 	}
