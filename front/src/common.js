@@ -71,21 +71,30 @@ const api = {
         
         const url = `${DOMAIN}${endpoint}${queryString ? '?' + queryString : ''}`;
         
-        const response = await fetch(url, {
-            headers: {
-                'Authorization': storage.get(STORAGE_KEYS.TOKEN) || ''
+        // 设置5分钟超时
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000);
+        
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    'Authorization': storage.get(STORAGE_KEYS.TOKEN) || ''
+                },
+                signal: controller.signal
+            });
+            
+            const data = await response.json();
+            
+            // 检查登录状态
+            if (data.code === 2) {
+                redirectToLogin();
+                return null;
             }
-        });
-        
-        const data = await response.json();
-        
-        // 检查登录状态
-        if (data.code === 2) {
-            redirectToLogin();
-            return null;
+            
+            return data;
+        } finally {
+            clearTimeout(timeoutId);
         }
-        
-        return data;
     },
     
     /**
@@ -108,13 +117,22 @@ const api = {
             processedBody = JSON.stringify(body);
         }
         
-        const response = await fetch(`${DOMAIN}${endpoint}`, {
-            method: 'POST',
-            headers,
-            body: processedBody
-        });
+        // 设置5分钟超时
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000);
         
-        return await response.json();
+        try {
+            const response = await fetch(`${DOMAIN}${endpoint}`, {
+                method: 'POST',
+                headers,
+                body: processedBody,
+                signal: controller.signal
+            });
+            
+            return await response.json();
+        } finally {
+            clearTimeout(timeoutId);
+        }
     }
 };
 
