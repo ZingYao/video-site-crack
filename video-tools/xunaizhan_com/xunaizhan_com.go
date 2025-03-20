@@ -78,7 +78,7 @@ func (x *XunaizhanCom) SearchVideos(query string) []videotools.VideoInfo {
 	return videoList
 }
 
-func (x *XunaizhanCom) GetVideoDetail(pageUrl string) map[string][]videotools.VideoDetail {
+func (x *XunaizhanCom) GetVideoDetail(pageUrl string, fastMode bool) map[string][]videotools.VideoDetail {
 	videoDetailList := make(map[string][]videotools.VideoDetail)
 	res, err := http.Get(pageUrl)
 	if err != nil {
@@ -92,6 +92,9 @@ func (x *XunaizhanCom) GetVideoDetail(pageUrl string) map[string][]videotools.Vi
 	wg := &sync.WaitGroup{}
 	wgMain := &sync.WaitGroup{}
 	doc.Find("div#NumTab").First().Find("a").Each(func(i int, selection *goquery.Selection) {
+		if fastMode && i > 0 {
+			return
+		}
 		wgMain.Add(1)
 		go func(i int, selection *goquery.Selection) {
 			defer wgMain.Done()

@@ -249,8 +249,21 @@ const searchVideo = async (site, query) => {
  * @returns {Promise<Object>} 视频详情
  */
 const getVideoDetail = async (site, url) => {
-    const response = await api.get('/api/site/detail', { site_name: site, page_url: url });
-    return response ? response.data : null;
+    try {
+        const response = await api.get('/api/site/detail', { site_name: site, page_url: url });
+        return response ? response.data : null;
+    } catch (error) {
+        // 如果返回504错误,添加fast_mode参数重试
+        if (error.status === 504) {
+            const retryResponse = await api.get('/api/site/detail', { 
+                site_name: site, 
+                page_url: url,
+                fast_mode: 'true'
+            });
+            return retryResponse ? retryResponse.data : null;
+        }
+        throw error;
+    }
 };
 
 /**
@@ -259,8 +272,7 @@ const getVideoDetail = async (site, url) => {
  * @param {Array} detail - 可选的视频详情
  */
 const clickVideoCard = async (element) => {
-    // 保存基本信息
-    storage.set(STORAGE_KEYS.TITLE, element.title);
+    // 只保存页面URL，不再单独保存title
     storage.set(STORAGE_KEYS.PAGE_URL, element.page_url);
     
     // 处理详情并跳转

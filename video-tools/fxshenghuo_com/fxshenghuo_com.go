@@ -35,7 +35,7 @@ type FxShengHuoCom struct {
 }
 
 // GetVideoDetail implements video_tools.VideoSiteInterface.
-func (f *FxShengHuoCom) GetVideoDetail(pageUrl string) map[string][]videotools.VideoDetail {
+func (f *FxShengHuoCom) GetVideoDetail(pageUrl string, fastMode bool) map[string][]videotools.VideoDetail {
 	videoDetailList := make(map[string][]videotools.VideoDetail)
 	res, err := http.Get(pageUrl)
 	if err != nil {
@@ -50,6 +50,9 @@ func (f *FxShengHuoCom) GetVideoDetail(pageUrl string) map[string][]videotools.V
 	wgMain := &sync.WaitGroup{}
 
 	doc.Find("ul.nav.nav-tabs.active").First().Find("a").Each(func(i int, selection *goquery.Selection) {
+		if fastMode && i > 0 {
+			return
+		}
 		wgMain.Add(1)
 		go func(i int, selection *goquery.Selection) {
 			defer wgMain.Done()

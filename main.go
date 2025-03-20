@@ -164,6 +164,7 @@ func main() {
 	apiGroup.GET("/site/detail", func(context *gin.Context) {
 		pageUrl := context.Query("page_url")
 		siteName := context.Query("site_name")
+		fastMode := context.Query("fast_mode") == "true"
 		tools, exists := video_tools.GetTool(siteName)
 		if !exists {
 			context.JSON(http.StatusOK, gin.H{
@@ -172,7 +173,7 @@ func main() {
 				"data": nil,
 			})
 		}
-		rspList := tools.GetVideoDetail(pageUrl)
+		rspList := tools.GetVideoDetail(pageUrl, fastMode)
 		context.JSON(http.StatusOK, gin.H{
 			"code": 0,
 			"msg":  "success",

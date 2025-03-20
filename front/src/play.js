@@ -83,17 +83,32 @@ window.onload = () => {
             return videoMap[this.currentEpisodeUrl];
         }
 
+        // 修改 VideoPlayerManager 类中的相关方法
+        // 在 saveCurrentProgress 方法中添加更多信息
+        
         // 保存当前剧集的播放进度
-        saveCurrentProgress(progress) {
+        saveCurrentProgress(progress, episodeInfo = null) {
             if (!this.currentVideoUrl || !this.currentEpisodeUrl) return;
             
             // 确保视频的Map存在
             if (!this.progressMap[this.currentVideoUrl]) {
                 this.progressMap[this.currentVideoUrl] = {};
             }
+            if (!progress) return;
             
-            // 保存进度
-            this.progressMap[this.currentVideoUrl][this.currentEpisodeUrl] = progress;
+            // 如果提供了剧集信息，保存更多详细信息
+            if (episodeInfo) {
+                this.progressMap[this.currentVideoUrl][this.currentEpisodeUrl] = {
+                    progress: progress,
+                    title: episodeInfo.title,
+                    episodeTitle: episodeInfo.episodeTitle,
+                    lastPlayed: new Date().toISOString()
+                };
+            } else {
+                // 保持原有的简单进度记录
+                this.progressMap[this.currentVideoUrl][this.currentEpisodeUrl] = progress;
+            }
+            
             this.saveProgressMap();
         }
 
@@ -117,10 +132,16 @@ window.onload = () => {
         }
 
         // 开始记录播放进度
-        startProgressRecord() {
+        startProgressRecord(episodeInfo = null) {
             this.stopProgressRecord(); // 确保不会创建多个计时器
+            
+            // 保存当前剧集信息
+            if (episodeInfo) {
+                this.currentEpisodeInfo = episodeInfo;
+            }
+            
             this.progressTimer = setInterval(() => {
-                this.saveCurrentProgress(this.player.currentTime);
+                this.saveCurrentProgress(this.player.currentTime, this.currentEpisodeInfo);
             }, 1000);
         }
 
@@ -132,7 +153,7 @@ window.onload = () => {
             }
             // 停止时也保存一次进度
             if (this.player.currentTime > 0) {
-                this.saveCurrentProgress(this.player.currentTime);
+                this.saveCurrentProgress(this.player.currentTime,this.currentEpisodeInfo);
             }
         }
 
@@ -141,7 +162,7 @@ window.onload = () => {
             // 恢复播放进度
             const savedProgress = this.getCurrentProgress();
             if (savedProgress) {
-                this.player.currentTime = savedProgress;
+                this.player.currentTime = savedProgress?.progress ?? 0;
             }
             
             // 恢复播放速率
@@ -337,13 +358,26 @@ window.onload = () => {
         }
     
         // 播放指定剧集
+        // 修改 playEpisode 方法
         playEpisode(episode) {
             storage.set(STORAGE_KEYS.CURRENT_EPISODE, episode.title);
-            // 传递视频URL和剧集URL，使用page_url属性
+            
+            // 传递视频URL和剧集URL
             this.videoPlayer.initPlayer(
                 episode.player_media, 
                 this.currentVideo.page_url || this.currentVideo.url
             );
+            
+            // 保存剧集信息到进度记录
+            const episodeInfo = {
+                title: this.currentVideo.title,
+                episodeTitle: episode.title
+            };
+            // 将剧集信息传递给VideoPlayerManager
+            this.videoPlayer.currentEpisodeInfo = episodeInfo;
+            
+            // 调用扩展的保存进度方法，传入剧集信息
+            this.videoPlayer.saveCurrentProgress(0, episodeInfo);
             
             // 更新按钮状态
             document.querySelectorAll('.episode-btn').forEach(btn => {
