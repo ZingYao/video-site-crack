@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
-	"log"
 	"net/http"
 	"net/url"
 	"sort"
@@ -39,7 +38,6 @@ func (x *XunaizhanCom) SearchVideos(query string) []videotools.VideoInfo {
 	param.Add("wd", query)
 	param.Add("submit", "")
 	res, err := http.Get(fmt.Sprintf("%s%s?%s", x.SiteDomain, x.SearchPath, param.Encode()))
-	log.Printf("url: %s,body:%v,err:%v", res.Request.URL.String(), res.Body, err)
 	if err != nil {
 		return videoList
 	}
@@ -80,8 +78,8 @@ func (x *XunaizhanCom) SearchVideos(query string) []videotools.VideoInfo {
 	return videoList
 }
 
-func (x *XunaizhanCom) GetVideoDetail(pageUrl string) []videotools.VideoDetail {
-	var videoDetailList []videotools.VideoDetail
+func (x *XunaizhanCom) GetVideoDetail(pageUrl string) map[string][]videotools.VideoDetail {
+	videoDetailList := make(map[string][]videotools.VideoDetail)
 	res, err := http.Get(pageUrl)
 	if err != nil {
 		return nil
@@ -92,23 +90,38 @@ func (x *XunaizhanCom) GetVideoDetail(pageUrl string) []videotools.VideoDetail {
 		return nil
 	}
 	wg := &sync.WaitGroup{}
-	doc.Find("ul.content_playlist.clearfix").First().Find("li").Each(func(i int, selection *goquery.Selection) {
-		wg.Add(1)
-		go func(selection *goquery.Selection) {
-			defer wg.Done()
-			subPageUrl := selection.Find("a").First().AttrOr("href", "")
-			name := selection.Find("a").First().Text()
-			mediaUrl := x.GetVideoUrl(fmt.Sprintf("%s%s", x.SiteDomain, subPageUrl))
-			videoDetailList = append(videoDetailList, videotools.VideoDetail{
-				Title:       name,
-				PlayerMedia: mediaUrl,
+	wgMain := &sync.WaitGroup{}
+	doc.Find("div#NumTab").First().Find("a").Each(func(i int, selection *goquery.Selection) {
+		wgMain.Add(1)
+		go func(i int, selection *goquery.Selection) {
+			defer wgMain.Done()
+			sourceName, _ := selection.Attr("alt")
+			sourceVideoList := make([]videotools.VideoDetail, 0)
+			doc.Find("ul.content_playlist.clearfix").Eq(i).Find("li").Each(func(i int, selection *goquery.Selection) {
+				wg.Add(1)
+				go func(index int, selection *goquery.Selection) {
+					defer wg.Done()
+					subPageUrl := selection.Find("a").First().AttrOr("href", "")
+					name := selection.Find("a").First().Text()
+					mediaUrl := x.GetVideoUrl(fmt.Sprintf("%s%s", x.SiteDomain, subPageUrl))
+					sourceVideoList = append(sourceVideoList, videotools.VideoDetail{
+						Title:       name,
+						PlayerMedia: mediaUrl,
+						Index:       index,
+					})
+				}(i, selection)
 			})
-		}(selection)
+			wg.Wait()
+			videoDetailList[sourceName] = sourceVideoList
+		}(i, selection)
 	})
-	wg.Wait()
-	sort.Slice(videoDetailList, func(i, j int) bool {
-		return videoDetailList[i].Title < videoDetailList[j].Title
-	})
+	wgMain.Wait()
+	for key, list := range videoDetailList {
+		sort.Slice(list, func(i, j int) bool {
+			return list[i].Index < list[j].Index
+		})
+		videoDetailList[key] = list
+	}
 	return videoDetailList
 }
 

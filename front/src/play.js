@@ -217,28 +217,125 @@ window.onload = () => {
             this.videoPlayer = videoPlayer;
             this.currentVideo = null;
             this.episodeList = document.getElementById('episodeList');
+            this.sourceSelector = document.getElementById('sourceSelector') || this.createSourceSelector();
+            this.currentSource = null; // 当前选中的视频源
             // 先加载视频信息，确保currentVideo已初始化
             if (this.loadCurrentVideo()) {
                 // 初始化时设置当前视频URL到播放器，使用page_url属性
                 this.videoPlayer.currentVideoUrl = this.currentVideo.page_url || this.currentVideo.url;
             }
         }
-
+    
+        // 创建视频源选择器
+        createSourceSelector() {
+            const selector = document.createElement('select');
+            selector.id = 'sourceSelector';
+            selector.className = 'source-selector';
+            selector.addEventListener('change', () => this.onSourceChange());
+            
+            // 创建源站选择器容器
+            const container = document.createElement('div');
+            container.className = 'source-selector-container';
+            container.innerHTML = '<span>视频源: </span>';
+            container.appendChild(selector);
+            
+            // 将选择器插入到剧集列表前面
+            const episodeContainer = this.episodeList.parentElement;
+            episodeContainer.insertBefore(container, this.episodeList);
+            
+            return selector;
+        }
+    
         // 加载当前视频信息
         loadCurrentVideo() {
             const history = storage.get(STORAGE_KEYS.HISTORY) || [];
             this.currentVideo = history[history.length - 1];
-
+    
             if (!this.currentVideo) {
                 window.location.href = '/index.html';
                 return false;
             }
-
+    
             // 设置视频标题
             document.getElementById('videoTitle').textContent = this.currentVideo.title;
+            
+            // 检查detail是否为map结构，如果不是则触发刷新
+            if (this.currentVideo.detail && !this.isDetailMap()) {
+                console.log('检测到旧版数据结构，正在刷新...');
+                this.refreshEpisodeList();
+                return true;
+            }
+            
+            // 初始化视频源选择器
+            this.initSourceSelector();
+            
             return true;
         }
-
+    
+        // 检查detail是否为map结构
+        isDetailMap() {
+            if (!this.currentVideo.detail) return false;
+            
+            // 检查是否为数组（旧结构）
+            if (Array.isArray(this.currentVideo.detail)) return false;
+            
+            // 检查是否为对象（新结构）
+            return typeof this.currentVideo.detail === 'object' && 
+                   Object.keys(this.currentVideo.detail).length > 0;
+        }
+    
+        // 初始化视频源选择器
+        initSourceSelector() {
+            if (!this.currentVideo || !this.currentVideo.detail || !this.isDetailMap()) return;
+            
+            // 清空选择器
+            this.sourceSelector.innerHTML = '';
+            
+            // 获取所有可用的视频源
+            const sources = Object.keys(this.currentVideo.detail);
+            
+            if (sources.length === 0) return;
+            
+            // 添加视频源选项
+            sources.forEach(source => {
+                const option = document.createElement('option');
+                option.value = source;
+                option.textContent = source;
+                this.sourceSelector.appendChild(option);
+            });
+            
+            // 设置默认选中的视频源
+            const lastSource = storage.get('lastSource');
+            if (lastSource && sources.includes(lastSource)) {
+                this.sourceSelector.value = lastSource;
+            }
+            
+            // 更新当前视频源
+            this.currentSource = this.sourceSelector.value;
+            storage.set('lastSource', this.currentSource);
+        }
+    
+        // 视频源变更处理
+        onSourceChange() {
+            this.currentSource = this.sourceSelector.value;
+            storage.set('lastSource', this.currentSource);
+            
+            // 重新渲染剧集列表
+            this.renderEpisodeList();
+            
+            // 默认播放第一集
+            const episodes = this.getCurrentSourceEpisodes();
+            if (episodes && episodes.length > 0) {
+                this.playEpisode(episodes[0]);
+            }
+        }
+    
+        // 获取当前源的剧集列表
+        getCurrentSourceEpisodes() {
+            if (!this.currentVideo || !this.currentSource || !this.isDetailMap()) return [];
+            return this.currentVideo.detail[this.currentSource] || [];
+        }
+    
         // 播放指定剧集
         playEpisode(episode) {
             storage.set(STORAGE_KEYS.CURRENT_EPISODE, episode.title);
@@ -254,15 +351,45 @@ window.onload = () => {
             });
             document.querySelector(`.episode-btn[data-title="${episode.title}"]`)?.classList.add('active');
         }
-
+    
         // 渲染剧集列表
         renderEpisodeList() {
             if (!this.currentVideo) return;
             
             this.episodeList.innerHTML = '';
             const currentEpisode = storage.get(STORAGE_KEYS.CURRENT_EPISODE);
-
-            this.currentVideo.detail.forEach((episode) => {
+            
+            // 处理旧版数据结构
+            if (!this.isDetailMap()) {
+                if (Array.isArray(this.currentVideo.detail)) {
+                    this.currentVideo.detail.forEach((episode) => {
+                        const episodeBtn = document.createElement('button');
+                        episodeBtn.className = 'episode-btn' + (episode.title === currentEpisode ? ' active' : '');
+                        episodeBtn.textContent = episode.title;
+                        episodeBtn.dataset.title = episode.title;
+                        episodeBtn.onclick = () => this.playEpisode(episode);
+                        this.episodeList.appendChild(episodeBtn);
+                    });
+                    
+                    // 默认播放第一集或上次播放的剧集
+                    if (this.currentVideo.detail.length > 0) {
+                        const targetEpisode = currentEpisode
+                            ? this.currentVideo.detail.find(ep => ep.title === currentEpisode)
+                            : this.currentVideo.detail[0];
+                        
+                        if (targetEpisode) {
+                            this.playEpisode(targetEpisode);
+                        }
+                    }
+                }
+                return;
+            }
+            
+            // 处理新版数据结构
+            if (!this.currentSource) return;
+            
+            const episodes = this.getCurrentSourceEpisodes();
+            episodes.forEach((episode) => {
                 const episodeBtn = document.createElement('button');
                 episodeBtn.className = 'episode-btn' + (episode.title === currentEpisode ? ' active' : '');
                 episodeBtn.textContent = episode.title;
@@ -270,27 +397,26 @@ window.onload = () => {
                 episodeBtn.onclick = () => this.playEpisode(episode);
                 this.episodeList.appendChild(episodeBtn);
             });
-
+    
             // 默认播放第一集或上次播放的剧集
-            if (this.currentVideo.detail.length > 0) {
+            if (episodes.length > 0) {
                 const targetEpisode = currentEpisode
-                    ? this.currentVideo.detail.find(ep => ep.title === currentEpisode)
-                    : this.currentVideo.detail[0];
+                    ? episodes.find(ep => ep.title === currentEpisode)
+                    : episodes[0];
                 
                 if (targetEpisode) {
-                    // 确保传递正确的视频URL
                     this.playEpisode(targetEpisode);
                 }
             }
         }
-
+    
         // 刷新剧集列表
         async refreshEpisodeList() {
             if (!this.currentVideo) return;
             
             const site = storage.get(STORAGE_KEYS.SITE);
-            const url = this.currentVideo.url;
-
+            const url = this.currentVideo.page_url;
+    
             try {
                 showLoading();
                 const newDetail = await getVideoDetail(site, url);
@@ -298,12 +424,14 @@ window.onload = () => {
                 // 更新历史记录中的剧集列表
                 this.currentVideo.detail = newDetail;
                 const updatedHistory = storage.get(STORAGE_KEYS.HISTORY) || [];
-                const index = updatedHistory.findIndex(item => item.url === url);
+                const index = updatedHistory.findIndex(item => item.page_url === url);
                 if (index !== -1) {
                     updatedHistory[index].detail = newDetail;
                     storage.set(STORAGE_KEYS.HISTORY, updatedHistory);
                 }
                 
+                // 重新初始化视频源选择器
+                this.initSourceSelector();
                 this.renderEpisodeList();
             } catch (error) {
                 alert('刷新失败，请稍后重试');
@@ -312,14 +440,22 @@ window.onload = () => {
                 hideLoading();
             }
         }
-
+    
         // 下载当前视频
         downloadCurrentVideo() {
             if (!this.currentVideo) return;
             
             const currentEpisode = storage.get(STORAGE_KEYS.CURRENT_EPISODE);
-            const episode = this.currentVideo.detail.find(ep => ep.title === currentEpisode);
-
+            let episode;
+            
+            // 处理不同的数据结构
+            if (this.isDetailMap() && this.currentSource) {
+                const episodes = this.getCurrentSourceEpisodes();
+                episode = episodes.find(ep => ep.title === currentEpisode);
+            } else if (Array.isArray(this.currentVideo.detail)) {
+                episode = this.currentVideo.detail.find(ep => ep.title === currentEpisode);
+            }
+    
             if (episode) {
                 // 使用迅雷下载协议
                 window.location.href = `thunder://${btoa('AA' + episode.player_media + 'ZZ')}`;

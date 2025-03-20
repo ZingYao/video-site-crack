@@ -299,6 +299,9 @@ const createVideoCard = (element) => {
     const card = document.createElement('div');
     card.className = 'video-card';
     card.onclick = () => clickVideoCard(element);
+    
+    // 为砌体布局添加固定宽度
+    card.style.width = '300px';
 
     // 创建封面容器
     const coverContainer = document.createElement('div');
@@ -393,6 +396,144 @@ const createDescriptionSection = (desc) => {
 };
 
 /**
+ * 初始化砌体布局
+ * @param {string} containerSelector - 容器选择器
+ * @param {string} itemSelector - 项目选择器
+ */
+const initMasonryLayout = (containerSelector, itemSelector) => {
+    const container = document.querySelector(containerSelector);
+    if (!container) return;
+    
+    // 添加必要的CSS样式
+    addMasonryStyles(containerSelector, itemSelector);
+    
+    // 创建ResizeObserver监听卡片高度变化
+    const resizeObserver = new ResizeObserver(() => {
+        updateMasonryLayout(containerSelector, itemSelector);
+    });
+    
+    // 监听所有卡片元素
+    document.querySelectorAll(itemSelector).forEach(item => {
+        resizeObserver.observe(item);
+    });
+    
+    // 初始布局
+    updateMasonryLayout(containerSelector, itemSelector);
+    
+    // 监听窗口大小变化
+    window.addEventListener('resize', () => {
+        updateMasonryLayout(containerSelector, itemSelector);
+    });
+    
+    // 监听AJAX请求完成，可能加载了新内容
+    document.addEventListener('ajaxEnd', () => {
+        setTimeout(() => {
+            updateMasonryLayout(containerSelector, itemSelector);
+        }, 100);
+    });
+};
+
+/**
+ * 为砌体布局添加必要的CSS样式
+ * @param {string} containerSelector - 容器选择器
+ * @param {string} itemSelector - 项目选择器
+ */
+const addMasonryStyles = (containerSelector, itemSelector) => {
+    // 检查是否已添加样式
+    if (document.getElementById('masonry-styles')) return;
+    
+    // 创建样式元素
+    const styleEl = document.createElement('style');
+    styleEl.id = 'masonry-styles';
+    
+    // 定义砌体布局所需的CSS
+    styleEl.textContent = `
+        ${containerSelector} {
+            position: relative;
+            width: 100%;
+            min-height: 500px; /* 初始最小高度 */
+            margin: 0 auto;
+        }
+        
+        ${itemSelector} {
+            width: 300px; /* 固定卡片宽度 */
+            margin: 0;
+            padding: 10px;
+            box-sizing: border-box;
+            transition: top 0.3s ease, left 0.3s ease;
+        }
+        
+        /* 确保描述内容在展开时不会被截断 */
+        .desc-content.expanded {
+            max-height: none;
+            overflow: visible;
+        }
+        
+        /* 确保图片不会超出卡片宽度 */
+        .video-cover img {
+            max-width: 100%;
+            height: auto;
+        }
+        
+        /* 移动端响应式调整 */
+        @media (max-width: 768px) {
+            ${itemSelector} {
+                width: 100%;
+            }
+        }
+    `;
+    
+    // 添加到文档头部
+    document.head.appendChild(styleEl);
+};
+
+/**
+ * 更新砌体布局
+ * @param {string} containerSelector - 容器选择器
+ * @param {string} itemSelector - 项目选择器
+ */
+const updateMasonryLayout = (containerSelector, itemSelector) => {
+    const container = document.querySelector(containerSelector);
+    if (!container) return;
+    
+    const items = container.querySelectorAll(itemSelector);
+    if (!items.length) return;
+    
+    // 获取容器宽度和卡片宽度
+    const containerWidth = container.offsetWidth;
+    const itemWidth = items[0].offsetWidth;
+    
+    // 计算每行可容纳的卡片数量
+    const columnsCount = Math.floor(containerWidth / itemWidth);
+    if (columnsCount <= 0) return;
+    
+    // 初始化每列的高度数组
+    const columnsHeight = Array(columnsCount).fill(0);
+    
+    // 为每个卡片分配位置
+    items.forEach(item => {
+        // 找出高度最小的列
+        const minColumnIndex = columnsHeight.indexOf(Math.min(...columnsHeight));
+        
+        // 设置卡片位置
+        const xPos = minColumnIndex * itemWidth;
+        const yPos = columnsHeight[minColumnIndex];
+        
+        item.style.position = 'absolute';
+        item.style.left = `${xPos}px`;
+        item.style.top = `${yPos}px`;
+        item.style.transition = 'top 0.3s ease, left 0.3s ease';
+        
+        // 更新该列高度
+        columnsHeight[minColumnIndex] += item.offsetHeight;
+    });
+    
+    // 设置容器高度为最高列的高度
+    container.style.height = `${Math.max(...columnsHeight)}px`;
+    container.style.position = 'relative';
+};
+
+/**
  * 显示图片预览
  * @param {string} src - 图片URL
  * @param {string} alt - 图片描述
@@ -408,15 +549,21 @@ const showImagePreview = (src, alt) => {
 /**
  * 显示加载遮罩
  */
-const showLoading = () => {
-    document.getElementById('loadingOverlay')?.classList.add('active');
+const showLoading = (smiTransparent = true) => {
+    const dom = document.getElementById('loadingOverlay')
+    dom?.classList.add('active');
+    if (smiTransparent) {
+        dom?.classList.add('bg-translucent')
+    }
 };
 
 /**
  * 隐藏加载遮罩
  */
 const hideLoading = () => {
-    document.getElementById('loadingOverlay')?.classList.remove('active');
+    const dom = document.getElementById('loadingOverlay')
+    dom?.classList.remove('active');
+    dom?.classList.remove('bg-translucent')
 };
 
 /**
@@ -450,6 +597,16 @@ window.addEventListener('load', () => {
         previewContainer.className = 'image-preview-container';
         previewContainer.onclick = () => previewContainer.classList.remove('active');
         document.body.appendChild(previewContainer);
+    }
+    
+    // 初始化砌体布局
+    // 检查当前页面是否为首页或历史记录页
+    const pathname = window.location.pathname;
+    if (pathname.includes('index.html') || pathname === '/' || pathname.includes('history.html')) {
+        // 延迟执行以确保内容已加载
+        setTimeout(() => {
+            initMasonryLayout('.video-list', '.video-card');
+        }, 300);
     }
 });
 

@@ -15,6 +15,7 @@ type (
 	VideoDetail struct {
 		Title       string `json:"title"`        // 剧集名称
 		PlayerMedia string `json:"player_media"` // 视频播放地址
+		Index       int    `json:"-"`
 	}
 
 	VideoSite struct {
