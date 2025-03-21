@@ -9,5 +9,5 @@ func TestSearchVideo(t *testing.T) {
 
 func TestGetVideoDetail(t *testing.T) {
 	tools := NewVideoSite()
-	tools.GetVideoDetail("http://www.fxshenghuo.com/sheng/24576.html")
+	tools.GetVideoDetail("http://www.fxshenghuo.com/sheng/24576.html", true)
 }

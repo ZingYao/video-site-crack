@@ -1,0 +1,71 @@
+/* 瀑布流布局容器 */
+.video-list {
+    position: relative;
+    width: 100%;
+    min-height: 500px;
+    margin: 0 auto;
+}
+
+/* 视频卡片基础样式 */
+.video-card {
+    width: 300px;
+    margin: 0;
+    padding: 10px;
+    box-sizing: border-box;
+    position: absolute;
+    transition: transform 0.3s ease, opacity 0.3s ease, top 0.3s ease, left 0.3s ease;
+    opacity: 0;
+    background: var(--bg-light);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px var(--shadow-color);
+    cursor: pointer;
+}
+
+.video-card.show {
+    opacity: 1;
+}
+
+.video-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px var(--shadow-color);
+}
+
+/* 确保描述内容在展开时不会被截断 */
+.desc-content.expanded {
+    max-height: none;
+    overflow: visible;
+}
+
+/* 确保图片不会超出卡片宽度 */
+.video-cover {
+    position: relative;
+    overflow: hidden;
+}
+
+.video-cover img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    transition: transform 0.3s;
+}
+
+.video-cover:hover img {
+    transform: scale(1.05);
+}
+
+/* 移动端响应式调整 */
+@media (max-width: 768px) {
+    .video-card {
+        width: 100%;
+        position: relative !important;
+        top: auto !important;
+        left: auto !important;
+        margin-bottom: 15px;
+        opacity: 1;
+    }
+    
+    .video-list {
+        height: auto !important;
+    }
+}
