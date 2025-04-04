@@ -37,6 +37,7 @@ type FxShengHuoCom struct {
 // GetVideoDetail implements video_tools.VideoSiteInterface.
 func (f *FxShengHuoCom) GetVideoDetail(pageUrl string, fastMode bool) map[string][]videotools.VideoDetail {
 	videoDetailList := make(map[string][]videotools.VideoDetail)
+	lock := &sync.Mutex{}
 	res, err := http.Get(pageUrl)
 	if err != nil {
 		return nil
@@ -74,6 +75,8 @@ func (f *FxShengHuoCom) GetVideoDetail(pageUrl string, fastMode bool) map[string
 				}(i, selection)
 			})
 			wg.Wait()
+			lock.Lock()
+			defer lock.Unlock()
 			videoDetailList[sourceName] = sourceVideoList
 		}(i, selection)
 	})
