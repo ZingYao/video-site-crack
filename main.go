@@ -12,6 +12,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	video_tools "video-site-crack/video-tools"
 	_ "video-site-crack/video-tools/fxshenghuo_com"
 	_ "video-site-crack/video-tools/xunaizhan_com"
@@ -19,8 +20,8 @@ import (
 
 //go:embed front/*
 var front embed.FS
-var loginList = make(map[string]string)
-var accountMap = make(map[string]string)
+var loginList = &sync.Map{}
+var accountMap = &sync.Map{}
 
 func main() {
 	initAccountMap()
@@ -93,7 +94,7 @@ func main() {
 		}
 		// 其他接口需要登录鉴权
 		token := ctx.GetHeader("Authorization")
-		if _, exists := loginList[token]; !exists {
+		if _, exists := loginList.Load(token); !exists {
 			ctx.JSON(http.StatusOK, gin.H{
 				"code": 2,
 				"msg":  "need login",
@@ -107,7 +108,8 @@ func main() {
 	apiGroup.POST("/login", func(context *gin.Context) {
 		username := context.PostForm("username")
 		password := context.PostForm("password")
-		if accountMap[username] != MD5Str(password) {
+		pass, _ := accountMap.Load(username)
+		if pass != MD5Str(password) {
 			context.JSON(http.StatusOK, gin.H{
 				"code": 3,
 				"msg":  "username or password error",
@@ -116,7 +118,7 @@ func main() {
 			return
 		}
 		token := uuid.New().String()
-		loginList[token] = username
+		loginList.Store(token, username)
 		context.JSON(http.StatusOK, gin.H{
 			"code": 0,
 			"msg":  "success",
@@ -128,7 +130,7 @@ func main() {
 	})
 	apiGroup.POST("/logout", func(context *gin.Context) {
 		token := context.GetHeader("Authorization")
-		delete(loginList, token)
+		loginList.Delete(token)
 		context.JSON(http.StatusOK, gin.H{
 			"code": 0,
 			"msg":  "success",
@@ -241,7 +243,7 @@ func readAccountFile() {
 	}
 
 	// 清空原有账号
-	accountMap = make(map[string]string)
+	accountMap.Clear()
 
 	// 解析文件内容
 	lines := strings.Split(string(content), "\n")
@@ -251,7 +253,7 @@ func readAccountFile() {
 			username := strings.TrimSpace(parts[0])
 			password := strings.TrimSpace(parts[1])
 			if username != "" && password != "" {
-				accountMap[username] = password
+				accountMap.Store(username, password)
 			}
 		}
 	}
