@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	video_tools "video-site-crack/video-tools"
+	_ "video-site-crack/video-tools/duanju2_com"
 	_ "video-site-crack/video-tools/fxshenghuo_com"
 	_ "video-site-crack/video-tools/xunaizhan_com"
 )
