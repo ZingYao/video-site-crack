@@ -3,6 +3,7 @@ package duanju2_com
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"net/http"
 	"net/url"
 	"sort"
@@ -35,7 +36,7 @@ type DuanJu2Com struct {
 }
 
 // GetVideoDetail implements video_tools.VideoSiteInterface.
-func (f *DuanJu2Com) GetVideoDetail(pageUrl string, fastMode bool) map[string][]videotools.VideoDetail {
+func (f *DuanJu2Com) GetVideoDetail(ctx *gin.Context, pageUrl string, fastMode bool) map[string][]videotools.VideoDetail {
 	videoDetailList := make(map[string][]videotools.VideoDetail)
 	lock := &sync.Mutex{}
 	res, err := http.Get(pageUrl)
@@ -61,7 +62,7 @@ func (f *DuanJu2Com) GetVideoDetail(pageUrl string, fastMode bool) map[string][]
 		wgMain.Add(1)
 		go func(i int, selection *goquery.Selection) {
 			defer wgMain.Done()
-			sourceName := selection.Find("a").First().Text()
+			sourceName := selection.Text()
 			sourceVideoList := make([]videotools.VideoDetail, 0)
 			href, _ := selection.Attr("href")
 			doc.Find(href).First().Find("li>a").Each(func(i int, selection *goquery.Selection) {
@@ -70,6 +71,11 @@ func (f *DuanJu2Com) GetVideoDetail(pageUrl string, fastMode bool) map[string][]
 					defer wg.Done()
 					subPageUrl := selection.AttrOr("href", "")
 					name := selection.Text()
+					select {
+					case <-ctx.Request.Context().Done():
+						return
+					default:
+					}
 					mediaUrl := f.GetVideoUrl(fmt.Sprintf("%s%s", f.SiteDomain, subPageUrl))
 					sourceVideoList = append(sourceVideoList, videotools.VideoDetail{
 						Title:       name,
@@ -95,7 +101,7 @@ func (f *DuanJu2Com) GetVideoDetail(pageUrl string, fastMode bool) map[string][]
 }
 
 // SearchVideos implements video_tools.VideoSiteInterface.
-func (f *DuanJu2Com) SearchVideos(query string) []videotools.VideoInfo {
+func (f *DuanJu2Com) SearchVideos(ctx *gin.Context, query string) []videotools.VideoInfo {
 	videoList := make([]videotools.VideoInfo, 0)
 	param := url.Values{}
 	param.Set("wd", query)

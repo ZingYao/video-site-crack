@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/gin-gonic/gin"
 	"net/http"
 	"net/url"
 	"sort"
@@ -32,7 +33,7 @@ type XunaizhanCom struct {
 	videotools.VideoSite
 }
 
-func (x *XunaizhanCom) SearchVideos(query string) []videotools.VideoInfo {
+func (x *XunaizhanCom) SearchVideos(ctx *gin.Context, query string) []videotools.VideoInfo {
 	videoList := make([]videotools.VideoInfo, 0)
 	param := url.Values{}
 	param.Add("wd", query)
@@ -78,7 +79,7 @@ func (x *XunaizhanCom) SearchVideos(query string) []videotools.VideoInfo {
 	return videoList
 }
 
-func (x *XunaizhanCom) GetVideoDetail(pageUrl string, fastMode bool) map[string][]videotools.VideoDetail {
+func (x *XunaizhanCom) GetVideoDetail(ctx *gin.Context, pageUrl string, fastMode bool) map[string][]videotools.VideoDetail {
 	videoDetailList := make(map[string][]videotools.VideoDetail)
 	lock := &sync.Mutex{}
 	res, err := http.Get(pageUrl)
@@ -107,6 +108,11 @@ func (x *XunaizhanCom) GetVideoDetail(pageUrl string, fastMode bool) map[string]
 					defer wg.Done()
 					subPageUrl := selection.Find("a").First().AttrOr("href", "")
 					name := selection.Find("a").First().Text()
+					select {
+					case <-ctx.Request.Context().Done():
+						return
+					default:
+					}
 					mediaUrl := x.GetVideoUrl(fmt.Sprintf("%s%s", x.SiteDomain, subPageUrl))
 					sourceVideoList = append(sourceVideoList, videotools.VideoDetail{
 						Title:       name,
@@ -139,6 +145,9 @@ func (x *XunaizhanCom) GetVideoUrl(pgUrl string) string {
 	}
 	defer res.Body.Close()
 	doc, err := goquery.NewDocumentFromReader(res.Body)
+	if err != nil {
+		return videoUrl
+	}
 	scriptDom := doc.Find("#fd_tips").First().Next()
 	scriptContent := scriptDom.Text()
 	var data map[string]any

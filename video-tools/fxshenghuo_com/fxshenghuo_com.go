@@ -2,6 +2,7 @@ package fxshenghuo_com
 
 import (
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -35,7 +36,7 @@ type FxShengHuoCom struct {
 }
 
 // GetVideoDetail implements video_tools.VideoSiteInterface.
-func (f *FxShengHuoCom) GetVideoDetail(pageUrl string, fastMode bool) map[string][]videotools.VideoDetail {
+func (f *FxShengHuoCom) GetVideoDetail(ctx *gin.Context, pageUrl string, fastMode bool) map[string][]videotools.VideoDetail {
 	videoDetailList := make(map[string][]videotools.VideoDetail)
 	lock := &sync.Mutex{}
 	res, err := http.Get(pageUrl)
@@ -66,6 +67,11 @@ func (f *FxShengHuoCom) GetVideoDetail(pageUrl string, fastMode bool) map[string
 					defer wg.Done()
 					subPageUrl := selection.AttrOr("href", "")
 					name := selection.Text()
+					select {
+					case <-ctx.Request.Context().Done():
+						return
+					default:
+					}
 					mediaUrl := f.GetVideoUrl(fmt.Sprintf("%s%s", f.SiteDomain, subPageUrl))
 					sourceVideoList = append(sourceVideoList, videotools.VideoDetail{
 						Title:       name,
@@ -91,7 +97,7 @@ func (f *FxShengHuoCom) GetVideoDetail(pageUrl string, fastMode bool) map[string
 }
 
 // SearchVideos implements video_tools.VideoSiteInterface.
-func (f *FxShengHuoCom) SearchVideos(query string) []videotools.VideoInfo {
+func (f *FxShengHuoCom) SearchVideos(ctx *gin.Context, query string) []videotools.VideoInfo {
 	videoList := make([]videotools.VideoInfo, 0)
 	param := url.Values{}
 	param.Set("searchword", query)

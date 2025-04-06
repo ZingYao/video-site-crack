@@ -8,7 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"io/fs"
+	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"runtime"
 	"strings"
@@ -106,6 +108,13 @@ func main() {
 		}
 		ctx.Next()
 	})
+	apiGroup.Use(func(ctx *gin.Context) {
+		// 记录请求发起者，请求提交内容
+		userName, _ := loginList.Load(ctx.GetHeader("Authorization"))
+		query, _ := url.QueryUnescape(ctx.Request.URL.RawQuery)
+		log.Printf("request_log:\tip:%s\tuser: %s\tpath: %s\tmethod: %s\tquery: %s\n", ctx.ClientIP(), userName, ctx.Request.URL.Path, ctx.Request.Method, query)
+		ctx.Next()
+	})
 	apiGroup.POST("/login", func(context *gin.Context) {
 		username := context.PostForm("username")
 		password := context.PostForm("password")
@@ -145,39 +154,39 @@ func main() {
 			"data": video_tools.GetToolsList(),
 		})
 	})
-	apiGroup.GET("/site/search", func(context *gin.Context) {
-		siteName := context.Query("site_name")
-		query := context.Query("query")
+	apiGroup.GET("/site/search", func(ctx *gin.Context) {
+		siteName := ctx.Query("site_name")
+		query := ctx.Query("query")
 		tools, exists := video_tools.GetTool(siteName)
 		if !exists {
-			context.JSON(http.StatusOK, gin.H{
+			ctx.JSON(http.StatusOK, gin.H{
 				"code": 1,
 				"msg":  "site not found",
 				"data": nil,
 			})
 			return
 		}
-		rspList := tools.SearchVideos(query)
-		context.JSON(http.StatusOK, gin.H{
+		rspList := tools.SearchVideos(ctx, query)
+		ctx.JSON(http.StatusOK, gin.H{
 			"code": 0,
 			"msg":  "success",
 			"data": rspList,
 		})
 	})
-	apiGroup.GET("/site/detail", func(context *gin.Context) {
-		pageUrl := context.Query("page_url")
-		siteName := context.Query("site_name")
-		fastMode := context.Query("fast_mode") == "true"
+	apiGroup.GET("/site/detail", func(ctx *gin.Context) {
+		pageUrl := ctx.Query("page_url")
+		siteName := ctx.Query("site_name")
+		fastMode := ctx.Query("fast_mode") == "true"
 		tools, exists := video_tools.GetTool(siteName)
 		if !exists {
-			context.JSON(http.StatusOK, gin.H{
+			ctx.JSON(http.StatusOK, gin.H{
 				"code": 1,
 				"msg":  "site not found",
 				"data": nil,
 			})
 		}
-		rspList := tools.GetVideoDetail(pageUrl, fastMode)
-		context.JSON(http.StatusOK, gin.H{
+		rspList := tools.GetVideoDetail(ctx, pageUrl, fastMode)
+		ctx.JSON(http.StatusOK, gin.H{
 			"code": 0,
 			"msg":  "success",
 			"data": rspList,
